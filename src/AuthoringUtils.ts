@@ -27,29 +27,23 @@ export class AuthoringUtils {
      */
     public static readonly AUTHORING_LIBRARIES = {
         JS: [
-            AuthoringUtils.EDITOR_CLIENTLIB_PATH + 'internal/messaging.js',
-            AuthoringUtils.EDITOR_CLIENTLIB_PATH + 'utils.js',
-            AuthoringUtils.EDITOR_CLIENTLIB_PATH + 'internal/page.js',
-            AuthoringUtils.EDITOR_CLIENTLIB_PATH + 'internal/pagemodel/messaging.js'
+            `${AuthoringUtils.EDITOR_CLIENTLIB_PATH}internal/messaging.js`,
+            `${AuthoringUtils.EDITOR_CLIENTLIB_PATH}utils.js`,
+            `${AuthoringUtils.EDITOR_CLIENTLIB_PATH}internal/page.js`,
+            `${AuthoringUtils.EDITOR_CLIENTLIB_PATH}internal/pagemodel/messaging.js`
         ],
         CSS: [
-            AuthoringUtils.EDITOR_CLIENTLIB_PATH + 'internal/page.css'
+            `${AuthoringUtils.EDITOR_CLIENTLIB_PATH}internal/page.css`
         ],
         META: {
             [MetaProperty.WCM_DATA_TYPE]: 'JSON'
         }
     };
 
-    /**
-     * @private
-     */
     constructor(domain: string | null) {
         this._apiDomain = domain;
     }
 
-    /**
-     * @private
-     */
     getApiDomain(): string | null {
         return this._apiDomain;
     }
@@ -58,17 +52,10 @@ export class AuthoringUtils {
      * Generates <script>, <link> and <meta> tags.
      * The document fragment needs to be added to the page to enable AEM Editing capabilities.
      *
-     * Example:
-     * ```
-     * import ModelManager, Constants, { AEM_MODE } from '@adobe/aem-spa-page-model-manager';
-     *
-     * await ModelManager.initialize({modelClient: new ModelClient(<<REMOTE_AEM_HOST>>)});
-     * ```
-     *
      * @returns HTML markup including state specific libraries.
      */
     public getAemLibraries(): DocumentFragment {
-        const docFragment: DocumentFragment = document.createDocumentFragment();
+        const docFragment = document.createDocumentFragment();
 
         if (!AuthoringUtils.isRemoteApp() || !AuthoringUtils.isEditMode()) {
             return docFragment;
@@ -95,23 +82,18 @@ export class AuthoringUtils {
     public setOnLoadCallback(docFragment: DocumentFragment, callback: () => void) {
         const scriptTags = docFragment.querySelectorAll('script');
 
-        if (!scriptTags.length) {
+        if (scriptTags.length === 0) {
             callback();
         } else {
-            scriptTags[scriptTags.length - 1].onload = () => {
-                callback();
-            };
+            scriptTags[scriptTags.length - 1].onload = () => callback();
         }
-
     }
 
-    private generateMetaElements(metaInfo: {[key :string]:string}) :DocumentFragment {
-        const docFragment: DocumentFragment = document.createDocumentFragment();
+    private generateMetaElements(metaInfo: { [key: string]: string }): DocumentFragment {
+        const docFragment = document.createDocumentFragment();
 
-        Object.entries(metaInfo).forEach((entry) => {
-            const [ key, val ] = entry;
+        Object.entries(metaInfo).forEach(([key, val]) => {
             const metaElement = document.createElement('meta');
-
             metaElement.setAttribute('property', key);
             metaElement.content = val;
             docFragment.appendChild(metaElement);
@@ -121,11 +103,10 @@ export class AuthoringUtils {
     }
 
     private generateLinkElements(cssUrls: string[]): DocumentFragment {
-        const docFragment: DocumentFragment = document.createDocumentFragment();
+        const docFragment = document.createDocumentFragment();
 
-        cssUrls.forEach((url: string) => {
+        cssUrls.forEach(url => {
             const linkElement = document.createElement('link');
-
             linkElement.type = 'text/css';
             linkElement.rel = 'stylesheet';
             linkElement.href = url;
@@ -136,15 +117,14 @@ export class AuthoringUtils {
     }
 
     private generateScriptElements(jsUrls: string[]): DocumentFragment {
-        const docFragment: DocumentFragment = document.createDocumentFragment();
+        const docFragment = document.createDocumentFragment();
 
-        jsUrls.forEach((url: string) => {
-            const htmlScriptElement = document.createElement('script');
-
-            htmlScriptElement.type = 'text/javascript';
-            htmlScriptElement.src = url;
-            htmlScriptElement.async = false;
-            docFragment.appendChild(htmlScriptElement);
+        jsUrls.forEach(url => {
+            const scriptElement = document.createElement('script');
+            scriptElement.type = 'text/javascript';
+            scriptElement.src = url;
+            scriptElement.async = false;
+            docFragment.appendChild(scriptElement);
         });
 
         return docFragment;
@@ -181,13 +161,10 @@ export class AuthoringUtils {
     public static isRemoteApp(): boolean {
         try {
             const url = new URL(PathUtils.getCurrentURL());
-
             return !!url.searchParams.get(MetaProperty.WCM_MODE);
         } catch (e) {
-            // invalid url
+            return false;
         }
-
-        return false;
     }
 
     /**
@@ -196,17 +173,12 @@ export class AuthoringUtils {
      * @returns AEM mode.
      */
     private static getWCMModeFromURL(): string {
-        let url: URL;
-
         try {
-            url = new URL(PathUtils.getCurrentURL());
-
+            const url = new URL(PathUtils.getCurrentURL());
             return url.searchParams.get(MetaProperty.WCM_MODE) || '';
         } catch (e) {
-            // invalid url
+            return '';
         }
-
-        return '';
     }
 
     /**
@@ -215,14 +187,8 @@ export class AuthoringUtils {
      * @returns Clientlib URLs.
      */
     private prependDomain(libraries: string[]): string[] {
-        const result: string[] = [];
         const domain = this.getApiDomain();
-
-        libraries.forEach((library) => {
-            result.push(`${domain || ''}${library}`);
-        });
-
-        return result;
+        return libraries.map(library => `${domain || ''}${library}`);
     }
 
     /**
@@ -233,3 +199,5 @@ export class AuthoringUtils {
         return AuthoringUtils.isEditMode() || AuthoringUtils.isPreviewMode() || AuthoringUtils.isRemoteApp();
     }
 }
+
+export default AuthoringUtils;

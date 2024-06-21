@@ -1,429 +1,200 @@
-/*
- * Copyright 2020 Adobe. All rights reserved.
- * This file is licensed to you under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License. You may obtain a copy
- * of the License at http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software distributed under
- * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR REPRESENTATIONS
- * OF ANY KIND, either express or implied. See the License for the specific language
- * governing permissions and limitations under the License.
- */
-
-import { normalize as normalizePath } from 'path';
-import url from 'url';
 import Constants from './Constants';
 import InternalConstants from './InternalConstants';
 import MetaProperty from './MetaProperty';
 
-/**
- * Regexp used to extract the context path of a location.
- * The context path is extracted by assuming that the location starts with the context path followed by one of the following node names.
- * @private
- */
 const CONTEXT_PATH_REGEXP = /(?:\/)(?:content|apps|libs|etc|etc.clientlibs|conf|mnt\/overlay)(?:\/)/;
-
-/**
- * @private
- */
 const JCR_CONTENT_PATTERN = `(.+)/${Constants.JCR_CONTENT}/(.+)`;
+const DUMMY_ORIGIN = 'http://dummy';
 
-/**
- * @private
- */
- const DUMMY_ORIGIN = 'http://dummy';
-
-/**
- * Helper functions related to path manipulation.
- * @private
- */
 export class PathUtils {
-    /**
-     * Returns if the code executes in the browser context or not by checking for the
-     * existance of the window object
-     *
-     * @returns The result of the check of the existance of the window object.
-     */
     public static isBrowser(): boolean {
         return typeof window !== 'undefined';
     }
 
-    /**
-     * Returns the context path of the given location.
-     * If no location is provided, it fallbacks to the current location.
-     * @param [location] Location to be used to detect the context path from.
-     * @returns
-     */
     public static getContextPath(location?: string | null): string {
         const path = location || this.getCurrentPathname();
-
-        if (!path) {
-            return '';
-        }
+        if (!path) return '';
 
         const matches = path.match(CONTEXT_PATH_REGEXP);
-        const index = (matches === null) ? -1 : (matches.index || -1);
-        const contextPath = (index > 0) ? path.slice(0, index) : '';
-
-        return contextPath;
+        const index = matches ? matches.index ?? -1 : -1;
+        return index > 0 ? path.slice(0, index) : '';
     }
 
-    /**
-     * Adapts the provided path to a valid model path.
-     * Returns an empty string if the given path is equal to the root model path.
-     * This function is a utility tool that converts a provided root model path into an internal specific empty path
-     *
-     * @param [path] Raw model path.
-     * @private
-     * @return The valid model path.
-     */
     public static adaptPagePath(path: string, rootPath?: string): string {
-        if (!path) {
-            return '';
-        }
-
+        if (!path) return '';
         const localPath = PathUtils.internalize(path);
-
-        if (!rootPath) {
-            return localPath;
-        }
+        if (!rootPath) return localPath;
 
         const localRootModelPath = PathUtils.sanitize(rootPath);
-
-        return (localPath === localRootModelPath) ? '' : localPath;
+        return localPath === localRootModelPath ? '' : localPath;
     }
 
-    /**
-     * Returns the given URL externalized by adding the optional context path.
-     * @param url URL to externalize.
-     * @returns
-     */
     public static externalize(url: string): string {
         const contextPath = this.getContextPath();
-        const externalizedPath = url.startsWith(contextPath) ? url : `${contextPath}${url}`;
-
-        return externalizedPath;
+        return url.startsWith(contextPath) ? url : `${contextPath}${url}`;
     }
 
-    /**
-     * Returns the given URL internalized by removing the optional context path.
-     * @param url URL to internalize.
-     * @returns
-     */
     public static internalize(url: string | null): string {
-        if (!url || (typeof url !== 'string')) {
-            return '';
-        }
-
+        if (!url || typeof url !== 'string') return '';
         const contextPath = this.getContextPath();
-        const internalizedPath = url.replace(new RegExp(`^${contextPath}/`), '/');
-
-        return internalizedPath;
+        return url.replace(new RegExp(`^${contextPath}/`), '/');
     }
 
-    /**
-     * Returns the value of the meta property with the given key.
-     * @param propertyName Name of the meta property.
-     * @return
-     */
     public static getMetaPropertyValue(propertyName: string): string | null {
-        let value = null;
-
-        if (this.isBrowser()) {
-            const meta = document.head.querySelector(`meta[property="${propertyName}"]`);
-
-            value = meta ? meta.getAttribute('content') : null;
-        }
-
-        return value;
+        if (!this.isBrowser()) return null;
+        const meta = document.head.querySelector(`meta[property="${propertyName}"]`);
+        return meta ? meta.getAttribute('content') : null;
     }
 
-    /**
-     * Returns a model path for the given URL.
-     * @param url Raw URL for which to get a model URL.
-     */
     public static convertToModelUrl(url: string): string | undefined {
-        return url && url.replace && url.replace(/\.htm(l)?$/, InternalConstants.DEFAULT_MODEL_JSON_EXTENSION);
+        return url.replace(/\.htm(l)?$/, InternalConstants.DEFAULT_MODEL_JSON_EXTENSION);
     }
 
-    /**
-     * Returns the model URL as contained in the current page URL.
-     */
     public static getCurrentPageModelUrl(): string | null {
-        // extract the model from the pathname
-        const currentPath: string | null = this.getCurrentPathname();
-        let url = null;
-
-        if (currentPath) {
-            url = this.convertToModelUrl(currentPath) || null;
-        }
-
-        return url;
+        const currentPath = this.getCurrentPathname();
+        return currentPath ? this.convertToModelUrl(currentPath) || null : null;
     }
 
-    /**
-     * Returns the URL of the page model to initialize the page model manager with.
-     * It is either derived from a meta tag property called 'cq:pagemodel_root_url' or from the given location.
-     * If no location is provided, it derives it from the current location.
-     * @param [url]   - path or URL to be used to derive the page model URL from
-     * @returns
-     */
-    public static getModelUrl(url?: string) {
-        // Model path extracted from the given url
-        if (url && url.replace) {
+    public static getModelUrl(url?: string): string | undefined {
+        if (url) {
             return this.convertToModelUrl(url);
         }
-
-        // model path from the meta property
         const metaModelUrl = this.getMetaPropertyValue(MetaProperty.PAGE_MODEL_ROOT_URL);
-
-        if (metaModelUrl) {
+        if (metaModelUrl !== null) {
             return metaModelUrl;
         }
-
-        // Model URL extracted from the current page URL
-        return this.getCurrentPageModelUrl();
+        return this.getCurrentPageModelUrl() || undefined;
     }
 
-    /**
-     * Returns the given path after sanitizing it.
-     * This function should be called on page paths before storing them in the page model,
-     * to make sure only properly formatted paths (e.g., "/content/mypage") are stored.
-     * @param path - Path of the page to be sanitized.
-     */
     public static sanitize(path: string | null): string | null {
-        if (!path || (typeof path !== 'string')) {
-            return null;
-        }
+        if (!path || typeof path !== 'string') return null;
 
-        // Parse URL, then remove protocol and domain (if they exist).
-        // Important: URLs starting with "//some/path" will resolve to
-        // "http://some/path" or "https://some/path" (note that the first
-        // substring will be used as the hostname)
-        let sanitizedPath = url.parse(path, false, true).pathname;
-
-        // Remove context path (if it exists)
+        let sanitizedPath = this.parsePathname(path);
         if (sanitizedPath) {
             sanitizedPath = this.internalize(sanitizedPath);
-
-            // Remove selectors (if they exist)
             const selectorIndex = sanitizedPath.indexOf('.');
-
             if (selectorIndex > -1) {
                 sanitizedPath = sanitizedPath.substr(0, selectorIndex);
             }
-
-            // Normalize path (replace multiple consecutive slashes with a single
-            // one). It's important that the final sanitized URL does not start with
-            // "//" as this might lead to resources from other sites being loaded
-            sanitizedPath = normalizePath(sanitizedPath);
+            sanitizedPath = this.normalize(sanitizedPath);
         }
 
         return sanitizedPath;
     }
 
-    /**
-     * Returns the given path extended with the given extension.
-     * @param path - Path to be extended.
-     * @param extension - Extension to be added.
-     */
+    private static parsePathname(path: string): string | null {
+        try {
+            const url = new URL(path, DUMMY_ORIGIN);
+            return url.pathname;
+        } catch {
+            return path;
+        }
+    }
+
     public static addExtension(path: string, extension: string): string {
-        if (!extension || extension.length < 1) {
-            return path;
-        }
-        if (!extension.startsWith('.')) {
-            extension = `.${extension}`;
-        }
-        if (!path || (path.length < 1) || (path.indexOf(extension) > -1)) {
-            return path;
-        }
+        if (!extension) return path;
+        extension = extension.startsWith('.') ? extension : `.${extension}`;
+        if (!path || path.includes(extension)) return path;
 
         let extensionPath = this.normalize(path);
-        const url = new URL(extensionPath, DUMMY_ORIGIN);
-        let resourcePath = this.sanitize(url.pathname);
+        const parsedUrl = new URL(extensionPath, DUMMY_ORIGIN);
+        let resourcePath = this.sanitize(parsedUrl.pathname);
 
-        // checking if path contains hostnamd and adding it resourcepath
-        resourcePath = url.origin === DUMMY_ORIGIN ? resourcePath : url.origin + resourcePath;
-
-        let pathWithoutResource = this._extractPathWithoutResource(url.pathname);
+        resourcePath = parsedUrl.origin === DUMMY_ORIGIN ? resourcePath : parsedUrl.origin + resourcePath;
+        let pathWithoutResource = this._extractPathWithoutResource(parsedUrl.pathname);
 
         pathWithoutResource = this._replaceExtension(pathWithoutResource, extension);
-        extensionPath = (resourcePath + '.' + pathWithoutResource + url.search).replace(/\.\./g, '.');
+        extensionPath = (resourcePath + '.' + pathWithoutResource + parsedUrl.search).replace(/\.\./g, '.');
 
         return extensionPath;
     }
 
-    /**
-     * Returns path after removing resource path
-     * /content/dummy.html/abc/def -> html/abc/def
-     * /content/dummy.selector1.selector2.test.html/abc/def -> selector1.selector2.test.html/abc/def
-     * @param path - Url pathName
-     */
-    private static _extractPathWithoutResource(path: string) {
+    private static _extractPathWithoutResource(path: string): string {
         const slingElements = path.split('.');
-
         slingElements.shift();
-
         return slingElements.join('.');
     }
 
-    /**
-     * Returns given path with added extension or replaces html with extension
-     * @param pathWithoutResource - url path without reosurce path
-     * @param extension - extension to be added
-     */
-
-    private static _replaceExtension(pathWithoutResource: string, extension: string) {
-        if (pathWithoutResource.length < 1)
-            return extension;
+    private static _replaceExtension(pathWithoutResource: string, extension: string): string {
+        if (pathWithoutResource.length < 1) return extension;
 
         const slingElementsWithoutResource = pathWithoutResource.split('/');
         const selectors = slingElementsWithoutResource[0].split('.');
         let currentExtension = selectors.pop();
 
         currentExtension = currentExtension ? currentExtension.replace(/htm(l)?/, '') : '';
-
         let path = selectors.join('.') + '.' + currentExtension + extension;
 
         slingElementsWithoutResource.shift();
-
         if (slingElementsWithoutResource.length > 0) {
             path += slingElementsWithoutResource.join('/');
         }
 
         return path;
     }
-    /**
-     * Returns the given path extended with the given selector.
-     * @param path - Path to be extended.
-     * @param selector - Selector to be added.
-     */
+
     public static addSelector(path: string, selector: string): string {
-        if (!selector || (selector.length < 1)) {
-            return path;
-        }
-
-        if (!selector.startsWith('.')) {
-            selector = `.${selector}`;
-        }
-
-        if (!path || (path.length < 1) || (path.indexOf(selector) > -1)) {
-            return path;
-        }
+        if (!selector) return path;
+        selector = selector.startsWith('.') ? selector : `.${selector}`;
+        if (!path || path.includes(selector)) return path;
 
         const index = path.indexOf('.') || path.length;
-
-        if (index < 0) {
-            return path + selector;
-        }
-
-        return path.slice(0, index) + selector + path.slice(index, path.length);
+        return path.slice(0, index) + selector + path.slice(index);
     }
 
-    /**
-     * Returns the current location as a string.
-     */
     public static getCurrentPathname(): string | null {
         return this.isBrowser() ? window.location.pathname : null;
     }
 
-    /**
-     * Returns empty string or current URL if called in the browser.
-     * @returns Current URL.
-     */
     public static getCurrentURL(): string {
         return this.isBrowser() ? window.location.href : '';
     }
 
-    /**
-     * Dispatches a custom event on the window object, when in the browser context.
-     * @param eventName The name of the custom event.
-     * @param options The custom event options.
-     */
     public static dispatchGlobalCustomEvent(eventName: string, options: any): void {
         if (this.isBrowser()) {
             window.dispatchEvent(new CustomEvent(eventName, options));
         }
     }
 
-    /**
-     * Joins given path segments into a string using slash.
-     */
     public static join(paths?: string[]): string {
-        return paths ? this.normalize(paths.filter((path) => path).join('/')) : '';
+        return paths ? this.normalize(paths.filter(Boolean).join('/')) : '';
     }
 
-    /**
-     * Normalizes given path by replacing repeated slash with a single one.
-     */
     public static normalize(path?: string): string {
-        const normalizedPath = path ? path.replace(/\/+/g, '/') : '';
-
-        return normalizedPath;
+        return path ? path.replace(/\/+/g, '/') : '';
     }
 
-    /**
-     * Returns path that starts with slash.
-     */
     public static makeAbsolute(path?: string): string {
-        if (!path || (typeof path !== 'string')) {
-            return '';
-        }
-
+        if (!path || typeof path !== 'string') return '';
         return path.startsWith('/') ? path : `/${path}`;
     }
 
-    /**
-     * Returns path without the leading slash.
-     */
     public static makeRelative(path?: string): string {
-        if (!path || (typeof path !== 'string')) {
-            return '';
-        }
-
+        if (!path || typeof path !== 'string') return '';
         return path.startsWith('/') ? path.slice(1) : path;
     }
 
-    /**
-     * Returns path to the direct parent.
-     */
     public static getParentNodePath(path: string | null): string | null {
-        if (path && (path.length > 0)) {
+        if (path) {
             const splashIndex = path.lastIndexOf('/') + 1;
-
             if (splashIndex < path.length) {
                 return path.substring(0, splashIndex - 1);
             }
         }
-
         return null;
     }
 
-    /**
-     * Checks if given path is an JCR path.
-     */
     public static isItem(path: string): boolean {
         return new RegExp(JCR_CONTENT_PATTERN).test(path);
     }
 
-    /**
-     * Returns the name of the last node of the given path.
-     */
     public static getNodeName(path: string): string | null {
-        const chunks = (typeof path === 'string') ? path.replace(/\/+/g, '/').split(/\//).filter(Boolean) : [];
-        const result = chunks.pop() || null;
-
-        return result;
+        const chunks = path ? path.replace(/\/+/g, '/').split('/').filter(Boolean) : [];
+        return chunks.pop() || null;
     }
 
-    /**
-     * Returns the subpath of the targetPath relative to the rootPath,
-     * or the targetPath if the rootPath is not a root of the targetPath.
-     */
     public static subpath(targetPath?: string, rootPath?: string): string {
-        if (!targetPath) {
-            return '';
-        }
+        if (!targetPath) return '';
 
         const targetPathChildren = PathUtils.makeRelative(targetPath).split('/');
         const rootPathChildren = PathUtils.makeRelative(rootPath).split('/');
@@ -433,42 +204,33 @@ export class PathUtils {
         }
 
         let index;
-
         for (index = 0; index < rootPathChildren.length; ++index) {
             if (targetPathChildren[index] !== rootPathChildren[index]) {
                 break;
             }
         }
 
-        if (index === rootPathChildren.length) {
-            return targetPathChildren.slice(index).join('/');
-        }
-
-        return targetPath;
+        return index === rootPathChildren.length
+            ? targetPathChildren.slice(index).join('/')
+            : targetPath;
     }
 
-    /**
-     * Returns an array of segments of the path, split by the custom set of delimitators passed as an array.
-     */
-    public static splitByDelimitators(path: string, delimitators: string[]) {
-        let paths = [ path ];
+    public static splitByDelimitators(path: string, delimitators: string[]): string[] {
+        let paths = [path];
 
-        delimitators.forEach((delimitator) => {
+        delimitators.forEach(delimitator => {
             let newPaths: string[] = [];
             const delim = PathUtils.normalize(PathUtils.makeAbsolute(delimitator) + '/');
 
-            paths.forEach((path) => {
-                newPaths = newPaths.concat(path.split(delim));
-
-                if (path.endsWith(delimitator)) {
+            paths.forEach(pathSegment => {
+                newPaths = newPaths.concat(pathSegment.split(delim));
+                if (pathSegment.endsWith(delimitator)) {
                     const lastPath = newPaths.splice(newPaths.length - 1, 1)[0];
-
                     if (lastPath !== delimitator) {
                         newPaths = newPaths.concat(lastPath.split(PathUtils.makeAbsolute(delimitator)));
                     }
                 }
-
-                newPaths = newPaths.filter((path) => path);
+                newPaths = newPaths.filter(Boolean);
             });
 
             paths = newPaths;
@@ -477,52 +239,28 @@ export class PathUtils {
         return paths;
     }
 
-    /**
-     * Returns an JCR path based on pagePath and dataPath.
-     * @param pagePath Path to the page.
-     * @param dataPath Path to the item on the page.
-     */
     public static _getJCRPath(pagePath: string, dataPath: string): string {
-        return [ pagePath, Constants.JCR_CONTENT, dataPath ].join('/');
+        return [pagePath, Constants.JCR_CONTENT, dataPath].join('/');
     }
 
-    /**
-     * Returns object containing pagePath (path to a page) and, if exists, itemPath (path to the item on that page)
-     * from the passed path.
-     */
-    public static splitPageContentPaths(path: string): {itemPath?: string; pagePath: string} | undefined {
-        if (!path && (typeof path !== 'string')) {
-            return;
-        }
+    public static splitPageContentPaths(path: string): { itemPath?: string; pagePath: string } | undefined {
+        if (!path || typeof path !== 'string') return;
 
         const splitPaths = path.split(`/${Constants.JCR_CONTENT}/`);
-
-        const split:{
-            pagePath: string;
-            itemPath?: string;
-        } = {
-            pagePath: splitPaths[0]
+        return {
+            pagePath: splitPaths[0],
+            itemPath: splitPaths[1],
         };
-
-        if (splitPaths.length > 1) {
-            split.itemPath = splitPaths[1];
-        }
-
-        return split;
     }
 
-    /**
-     * Returns path that is no longer prefixed nor suffixed by the set of strings passed as an array.
-     */
     public static trimStrings(path: string, strings: string[]): string {
-        strings.forEach((str) => {
+        strings.forEach(str => {
             while (path.startsWith(str)) {
                 path = PathUtils.makeRelative(path.slice(str.length));
             }
 
             while (path.endsWith(str)) {
                 path = path.slice(0, path.length - str.length);
-
                 if (path.endsWith('/')) {
                     path = path.slice(0, path.length - 1);
                 }
@@ -535,7 +273,7 @@ export class PathUtils {
     public static _getStartStrings(path: string, strings: string[]): string {
         let returnStr = '';
 
-        strings.forEach((str) => {
+        strings.forEach(str => {
             while (path.startsWith(str)) {
                 path = PathUtils.makeRelative(path.slice(str.length));
                 returnStr = `${returnStr}/${str}`;
@@ -545,33 +283,14 @@ export class PathUtils {
         return PathUtils.makeRelative(returnStr);
     }
 
-    /**
-     * Helper for handling remote react app routing in edit mode
-     *
-     * When an external SPA is opened in the editor, the router needs updated path parameter
-     * to account for the AEM specific prefix in the URL
-     * eg: /home will become /content/{aem_project_name}/home
-     *
-     * @param path Path to route to
-     * @param aemHost Origin information of the AEM instance in which to edit
-     * @param rootPath AEM path which forms the root path of the remote app
-     * @returns Updated path to match against
-     */
     public static toAEMPath(path: string, aemHost: string, rootPath: string): string {
         const isLoadedInAEM = this.isBrowser() && window.location.origin === aemHost;
-
         if (isLoadedInAEM) {
-            // Remove leading and trailing slashes, if any
             rootPath = rootPath.replace(/^\/|\/$/g, '');
-
-            // editor.html - Not present in publish view
-            // aem project path - Optional in publish view. Could be removed if navigating within the app via links
             const aemPathPrefix = `(/editor.html)?(/content/${rootPath})?`;
 
-            if (path.indexOf(aemPathPrefix) < 0) {
-                const newPath = (`${aemPathPrefix}${path}(.html)?`);
-
-                return newPath;
+            if (!path.includes(aemPathPrefix)) {
+                return `${aemPathPrefix}${path}(.html)?`;
             }
         }
 

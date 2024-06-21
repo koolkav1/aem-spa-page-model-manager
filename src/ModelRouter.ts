@@ -70,7 +70,7 @@ export class RouterModes {
 }
 
 /**
- * Returns the model path. If no URL is provided the current window URL is used
+ * Returns the model path. If no URL is provided the current window URL is used.
  * @param [url] url from which to extract the model path
  * @private
  * @return
@@ -78,44 +78,27 @@ export class RouterModes {
 export function getModelPath(url?: string | null | URL): string | null {
     const localUrl = (url || (PathUtils.isBrowser() && window.location.pathname)) as string;
 
-    if (localUrl) {
-        return PathUtils.sanitize(localUrl);
-    }
-
-    return null;
+    return localUrl ? PathUtils.sanitize(localUrl) : null;
 }
 
 /**
  * Returns the list of provided route filters
- *
  * @returns {string[]}
- *
  * @private
  */
 export function getRouteFilters(): string[] {
     const routeFilters = PathUtils.getMetaPropertyValue(MetaProperty.PAGE_MODEL_ROUTE_FILTERS);
-
     return routeFilters ? routeFilters.split(',') : [];
 }
 
 /**
  * Should the route be excluded
- *
  * @param route
  * @returns {boolean}
- *
  * @private
  */
 export function isRouteExcluded(route: string): boolean {
-    const routeFilters = getRouteFilters();
-
-    for (let i = 0, length = routeFilters.length; i < length; i++) {
-        if (new RegExp(routeFilters[i]).test(route)) {
-            return true;
-        }
-    }
-
-    return false;
+    return getRouteFilters().some(filter => new RegExp(filter).test(route));
 }
 
 /**
@@ -124,86 +107,59 @@ export function isRouteExcluded(route: string): boolean {
  * @private
  */
 export function isModelRouterEnabled(): boolean {
-    if (!PathUtils.isBrowser()) {
-        return false;
-    }
+    if (!PathUtils.isBrowser()) return false;
 
     const modelRouterMetaType = PathUtils.getMetaPropertyValue(MetaProperty.PAGE_MODEL_ROUTER);
-
-    // Enable the the page model routing by default
-    return !modelRouterMetaType || (RouterModes.DISABLED !== modelRouterMetaType);
+    return !modelRouterMetaType || modelRouterMetaType !== RouterModes.DISABLED;
 }
 
 /**
  * Fetches the model from the PageModelManager and then dispatches it
- *
  * @fires cq-pagemodel-route-changed
- *
- * @param {string} [path]   - path of the model to be dispatched
- *
+ * @param {string} [path] - path of the model to be dispatched
  * @private
  */
 export function dispatchRouteChanged(path: string): void {
-    // Triggering the page model manager to load a new child page model
-    // No need to use a cache as the PageModelManager already does it
-    ModelManager.getData({ path }).then((model) => {
+    ModelManager.getData({ path }).then(model => {
         PathUtils.dispatchGlobalCustomEvent(EventType.PAGE_MODEL_ROUTE_CHANGED, {
-            detail: {
-                model
-            }
+            detail: { model }
         });
     });
 }
 
 /**
  * Triggers the PageModelManager to fetch data based on the current route
- *
  * @fires cq-pagemodel-route-changed - with the root page model object
- *
- * @param {string} [url]    - url from which to extract the model path
- *
+ * @param {string} [url] - url from which to extract the model path
  * @private
  */
-export function routeModel(url?: string | undefined | null | URL): void {
-    if (!isModelRouterEnabled()) {
-        return;
-    }
+export function routeModel(url?: string | null | URL): void {
+    if (!isModelRouterEnabled()) return;
 
     const path = getModelPath(url);
 
-    // don't fetch the model
-    // for the root path
-    // or when the route is excluded
-    if (!path || ('/' === path) || isRouteExcluded(path)) {
-        return;
+    if (path && path !== '/' && !isRouteExcluded(path)) {
+        dispatchRouteChanged(path);
     }
-
-    dispatchRouteChanged(path);
 }
 
 export function initModelRouter(): void {
-    // Activate the model router
     if (isModelRouterEnabled() && PathUtils.isBrowser()) {
-        // Encapsulate the history.pushState and history.replaceState functions to prefetch the page model for the current route
-        const pushState = window.history.pushState;
-        const replaceState = window.history.replaceState;
+        const { pushState, replaceState } = window.history;
 
-        window.addEventListener('popstate', e => {
-            const target = e?.target as Window;
-
+        window.addEventListener('popstate', event => {
+            const target = event.target as Window;
             routeModel(target?.location?.pathname || null);
         });
 
-        window.history.pushState = (state, title, url) => {
+        window.history.pushState = function(state, title, url) {
             routeModel(url);
-
-            return pushState.apply(history, [ state, title, url ]);
+            return pushState.apply(history, [state, title, url]);
         };
 
-        window.history.replaceState = (state, title, url) => {
+        window.history.replaceState = function(state, title, url) {
             routeModel(url || null);
-
-            return replaceState.apply(history, [ state, title, url ]);
+            return replaceState.apply(history, [state, title, url]);
         };
     }
 }

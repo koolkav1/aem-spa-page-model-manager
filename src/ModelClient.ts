@@ -17,7 +17,6 @@ export class ModelClient {
 
     /**
      * @constructor
-     * @private
      * @param [apiHost] Http host of the API.
      */
     constructor(apiHost?: string) {
@@ -39,31 +38,23 @@ export class ModelClient {
      */
     public fetch<M extends Model>(modelPath: string): Promise<M> {
         if (!modelPath) {
-            const err = `Fetching model rejected for path: ${modelPath}`;
-
-            return Promise.reject(new Error(err));
+            return Promise.reject(new Error(`Fetching model rejected for path: ${modelPath}`));
         }
 
-        // Either the API host has been provided or we make an absolute request relative to the current host
-        const apihostPrefix = this._apiHost || '';
-        const url = `${apihostPrefix}${modelPath}`;
+        const url = `${this._apiHost || ''}${modelPath}`;
 
-        // Assure that the default credentials value ('same-origin') is set for browsers which do not set it
-        // or which are setting the old default value ('omit')
-        return fetch(url, { credentials: 'same-origin' }).then((response) => {
-            if ((response.status >= 200) && (response.status < 300)) {
+        return fetch(url, { credentials: 'same-origin' })
+            .then((response) => {
+                if (!response.ok) {
+                    throw new Error(`Error fetching model. Status: ${response.status}`);
+                }
                 return response.json() as Promise<M>;
-            }
-
-            throw { response };
-        }).catch((error) => {
-            return Promise.reject(error);
-        });
+            })
+            .catch((error) => Promise.reject(error));
     }
 
     /**
      * Destroys the internal references to avoid memory leaks.
-     * @private
      */
     public destroy(): void {
         this._apiHost = null;
